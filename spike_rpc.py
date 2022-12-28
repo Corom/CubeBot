@@ -63,7 +63,7 @@ class RPC:
   def recv_response(self, id):
     while True:
       m = self.recv_message()
-      if 'i' in m and m['i'] == id:
+      if m and 'i' in m and m['i'] == id:
         logging.debug('response: %s' % m)
         if 'e' in m:
           error = json.loads(base64.b64decode(m['e']).decode('utf-8'))

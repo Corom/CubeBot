@@ -30,7 +30,7 @@ rpc.program_execute(args.slot)
 # if we ctrl+C then stop the running program
 def handler(signum, frame):
     rpc.program_terminate()
-    exit(1)
+    exit(0)
 signal.signal(signal.SIGINT, handler)
 
 show_status = args.monitor
@@ -100,5 +100,8 @@ while (True):
             print(repr(msg))
 
     # print any strings output via 'print' in the program
-    elif (msg):
+    elif msg:
+        if msg == "exit":
+            rpc.program_terminate()
+            exit(0)
         print(msg)

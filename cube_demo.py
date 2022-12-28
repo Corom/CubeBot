@@ -7,7 +7,7 @@ m = Motor('C')
 
 state = dict()
 def recieve_solution(p, id):
-  print("Recieved solution to cube %s" % repr(p))
+  print("Recieved solution to cube %s" % p)
   # store the solution in a state dictionary that we are waiting for
   state['solution'] = p
 

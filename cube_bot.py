@@ -1,5 +1,6 @@
 from spike import PrimeHub, LightMatrix, Button, StatusLight, ForceSensor, MotionSensor, Speaker, ColorSensor, App, DistanceSensor, Motor, MotorPair
 from spike.control import wait_for_seconds
+from protocol.ujsonrpc import json_rpc
 from spike import ColorSensor
 from math import *
 import uos, ustruct
@@ -34,7 +35,7 @@ class Face():
     D = 3
     L = 4
     B = 5
- 
+
 # calibration data
 colorReference = [None] * 6
 calibrationFile = "/data/cubecolors"
@@ -46,7 +47,7 @@ try:
     with open(calibrationFile, 'rb') as file:
         print("Reading calibration file")
         for face in range(6):
-            colorReference[face] = ustruct.unpack('3I', file.read(12))
+            colorReference[face] = ustruct.unpack('4I', file.read(16))
             file.close
 except:
     print("No calibration data.  please calibrate the cube.")
@@ -71,6 +72,7 @@ def Initialize():
 def Solved():
     # what will happon when the cube is solved 
     flipperMotor.run_to_position(flipperHome, "counterclockwise")
+    rotaterMotor.run_for_degrees(0)
     # add fun stuff 
 
 
@@ -81,21 +83,28 @@ def turnD(count, direction = regular):
 
 def rotateY(count, direction = regular):
     # rotating the cube on the y-axis
-    flipperMotor.run_to_position(flipperSpin, "counterclockwise" )
-    internal_rotateY(count, direction)
-
-def internal_rotateY(count, direction = regular):
-    # alowing the cube carier to turn the cube
+    if flipperMotor.get_position()-20 < flipperHold and flipperMotor.get_position()+20 > flipperHold:
+        flipperMotor.run_to_position(flipperSpin, "counterclockwise" )
+     
     if direction == regular :
         rotaterMotor.run_for_degrees(90 * count)
     else:
         rotaterMotor.run_for_degrees(-90 * count)
+    
+
+def internal_rotateY(count, direction = regular):
+    # alowing the cube carier to turn the cube
+    if direction == regular :
+        rotaterMotor.run_for_degrees(-90 * count)
+    else:
+        rotaterMotor.run_for_degrees(90 * count)
 
 def flipX(count):
     # fliping the cube on the x-axis 
     for x in range(count):
         flipperMotor.run_to_position(flipperHold)
-        flipperMotor.run_to_position(flipperFlip)        
+        flipperMotor.run_to_position(flipperFlip)  
+        wait_for_seconds(.5) 
 
 def calibrate():
     # the motion to calibrate the colors 
@@ -123,7 +132,7 @@ def calibrate():
         print("data directory already exists")
     with open(calibrationFile,'wb')as file:
         for rgb in colorReference:
-            file.write(ustruct.pack('3I',*rgb))
+            file.write(ustruct.pack('4I',*rgb))
     file.close
     
 def calibrateCenter(face):
@@ -132,7 +141,7 @@ def calibrateCenter(face):
     wait_for_seconds(0.5)
     rgb = scaner.get_rgb_intensity()
     colorReference[face] = rgb
-    print('{} center {}R {}G {}B'.format(face,rgb[0],rgb[1],rgb[2]))
+    print('{} center {}R {}G {}B {}I'.format(face,rgb[0],rgb[1],rgb[2],rgb[3]))
 
 
 def getSide(rgb):
@@ -141,10 +150,12 @@ def getSide(rgb):
     # loop all the calibrarion colors and return the index of the closest one
     for currentSide in range(6):
         refRgb = colorReference[currentSide]
-        er = abs (rgb[0] - refRgb[0])
-        eg = abs (rgb[1] - refRgb[1])
-        eb = abs (rgb[2] - refRgb[2])
-        eTotal = er + eg + eb
+        # fancy math
+        eTotal = colorDistance(rgb, refRgb)
+        # er = abs (rgb[0] - refRgb[0])
+        # eg = abs (rgb[1] - refRgb[1])
+        # eb = abs (rgb[2] - refRgb[2])
+        # eTotal = er + eg + eb
         # may need to inprove this compairison 
         if eTotal < bestSideE:
             bestSide = currentSide
@@ -174,6 +185,9 @@ def getSide(rgb):
 #             |************|
 
 
+scanResult = [None] * (6 * 9)
+scanColorResult = [[None]*9] * 6
+
 def scanCube():
     # scaning the whole cube
     flipperMotor.run_to_position(flipperHold)
@@ -184,16 +198,26 @@ def scanCube():
     flipX(1)
     scanFace(Face.D)
     flipX(1)
+    rotateY(2)
     scanFace(Face.B)
-    rotateY(1)
+    rotateY(1, prime)
     flipX(1)
+    rotateY(1)
     scanFace(Face.R)
     flipX(2)
+    rotateY(2)
     scanFace(Face.L)
     # puttting the cube back in the right orentation 
-    rotateY(1, prime)
+    rotateY(2)
     flipX(1)
     rotateY(1, prime)
+    cubeString = ''.join(scanResult)
+    print("cubestring = %s" % cubeString)
+    for i in range(6):
+        print("{} = {}".format(faceTable[i], ' '.join(scanColorResult[i])))
+
+    # send the cube state to the raspberry pi to be solved
+    json_rpc.emit("cube_scanned", cubeString)
 
 def scanFace(face):
     # center
@@ -215,17 +239,184 @@ def scanTile(face, tile):
     # stating the location and color
     rgb = scaner.get_rgb_intensity()
     color = getSide(rgb)
+    scanResult[(face*9) + tile - 1] = faceTable[color]
+    scanColorResult[face][tile - 1] = colorTable[color] # for debugging
     print("{}-{} color is {}".format(faceTable[face], tile, colorTable[color]))
 
-    
+#  UUUUUUUUU RRRFRRRRR FLFFFFFFF DDDDDDDDD LLLRLLLLL BBBBBBBBB
 
+def uMove(count, direction = regular):
+    flipX(2)
+    turnD(count, direction)
+    flipX(2)
+    
+def fMove(count, direction = regular):
+    rotateY(2)
+    flipX(1)
+    turnD(count, direction)
+    rotateY(2)
+    flipX(1)
+
+def bMove(count, direction = regular):
+    flipX(1)
+    turnD(count, direction)
+    flipX(3)
+
+def rMove(count, direction = regular):
+    rotateY(1, prime)
+    flipX(1)
+    turnD(count, direction)
+    rotateY(2)
+    flipX(1)
+    rotateY(1, prime)
+
+def lMove(count, direction = regular):
+    rotateY(1)
+    flipX(1)
+    turnD(count, direction)
+    rotateY(2)
+    flipX(1)
+    rotateY(1)
+
+def dMove(count, direction = regular):
+    turnD(count, direction)
+
+state = dict()
+def recieveSolutionMsg(solution, id):
+  print("Recieved solution to cube %s" % solution)
+  # store the solution in a state dictionary that we are waiting for
+  state['solution'] = solution
+
+# register the custom message handler for solve_cube
+json_rpc.add_method("solve_cube", recieveSolutionMsg)
+
+
+def solveCube(solution: str):
+    print("solving cube with moves: %s" % solution)
+    moves = solution.split(' ')
+    for move in moves:
+        print("Executing move: %s" % move)
+        face = move[0]
+        count = 1
+        direction = regular
+        if len(move) == 2:
+            if move[1] == "2":
+                count = 2
+            elif move[1] == "'":
+                direction = prime
+        # call the move function dynamicly using a nameing convention see https://www.danielmorell.com/blog/dynamically-calling-functions-in-python-safely
+        globals()["{}Move".format(face.lower())](count, direction)
+
+
+# compute distance between two colors.  see https://stackoverflow.com/questions/54242194/python-find-the-closest-color-to-a-color-from-giving-list-of-colors
+def colorDistance(rgbi1, rgb2):
+    r, g, b, i = rgbi1
+    cr, cg, cb, ib = rgb2
+    # pythagorean theorem
+    return sqrt((r - cr)**2 + (g - cg)**2 + (b - cb)**2 + (i - ib)**2)
+
+
+# in case we need super fancy math
+# convert rgb to CIELAB color space. see https://en.wikipedia.org/wiki/CIELAB_color_space
+def rgb2lab ( inputColor ) :
+
+   num = 0
+   RGB = [0, 0, 0]
+
+   for value in inputColor :
+       value = float(value) / 255
+
+       if value > 0.04045 :
+           value = ( ( value + 0.055 ) / 1.055 ) ** 2.4
+       else :
+           value = value / 12.92
+
+       RGB[num] = value * 100
+       num = num + 1
+
+   XYZ = [0, 0, 0,]
+
+   X = RGB [0] * 0.4124 + RGB [1] * 0.3576 + RGB [2] * 0.1805
+   Y = RGB [0] * 0.2126 + RGB [1] * 0.7152 + RGB [2] * 0.0722
+   Z = RGB [0] * 0.0193 + RGB [1] * 0.1192 + RGB [2] * 0.9505
+   XYZ[ 0 ] = round( X, 4 )
+   XYZ[ 1 ] = round( Y, 4 )
+   XYZ[ 2 ] = round( Z, 4 )
+
+   XYZ[ 0 ] = float( XYZ[ 0 ] ) / 95.047         # ref_X =  95.047   Observer= 2°, Illuminant= D65
+   XYZ[ 1 ] = float( XYZ[ 1 ] ) / 100.0          # ref_Y = 100.000
+   XYZ[ 2 ] = float( XYZ[ 2 ] ) / 108.883        # ref_Z = 108.883
+
+   num = 0
+   for value in XYZ :
+
+       if value > 0.008856 :
+           value = value ** ( 0.3333333333333333 )
+       else :
+           value = ( 7.787 * value ) + ( 16 / 116 )
+
+       XYZ[num] = value
+       num = num + 1
+
+   Lab = [0, 0, 0]
+
+   L = ( 116 * XYZ[ 1 ] ) - 16
+   a = 500 * ( XYZ[ 0 ] - XYZ[ 1 ] )
+   b = 200 * ( XYZ[ 1 ] - XYZ[ 2 ] )
+
+   Lab [ 0 ] = round( L, 4 )
+   Lab [ 1 ] = round( a, 4 )
+   Lab [ 2 ] = round( b, 4 )
+
+   return Lab
 
 # main program
 Initialize()
 
 # wait for scramble and input
 
+
 # tests
+# calibrate()
+scanCube()
+
+print("Waiting for solution")
+while('solution' not in state):
+    wait_for_seconds(.1)
+
+# # get the solution and delete it
+solution = state['solution']
+del state['solution']
+
+solveCube(solution)
+
+
+
+# print("Solving %s" % solution)
+# m.run_for_rotations(-.1, 50)
+
+# lMove(1)
+# bMove(1, prime)
+# dMove(1)
+# rMove(2)
+# bMove(1)
+# lMove(1, prime)
+# bMove(2)
+# lMove(1)
+# bMove(1, prime)
+# lMove(2)
+# dMove(2)
+# bMove(2)
+# rMove(2)
+# bMove(1, prime)
+# dMove(2)
+# lMove(2)
+# bMove(1, prime)
+# uMove(2)
+# dMove(2)
+# lMove(1,prime)
+
+
 
 #colorReference = [(49,13,99), (600,346,200), (50,500,50), (80,660,570), (6,760,50), (51,15,101)]
 #print("1 best side is {}".format(getSide((50,14,100))))
@@ -240,6 +431,8 @@ Initialize()
 #flipX(1)
 #turnD(2)
 #turnD(1)
-scanCube()
+#scanCube()
 
 Solved()
+
+print("exit")
