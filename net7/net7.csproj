@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net7.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../iot/src/Iot.Device.Bindings/Iot.Device.Bindings.csproj" />
+    <ProjectReference Include="../iot/src/System.Device.Gpio/System.Device.Gpio.csproj" />
+    <!-- <ProjectReference Include="../iot/src/devices/BuildHat/BuildHat.csproj" /> -->
+    
+    <!-- <PackageReference Include="Iot.Device.Bindings" Version="2.2.0" />
+    <PackageReference Include="System.Device.Gpio" Version="2.2.0" /> -->
+  </ItemGroup>
+
+</Project>
