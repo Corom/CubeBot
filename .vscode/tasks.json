@@ -8,12 +8,24 @@
             "type": "shell",
             "command": "python",
             "args": [
+                "cube_bot_pi.py"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "Run CubeBot on Spike",
+            "type": "shell",
+            "command": "python",
+            "args": [
                 "run_spike.py",
                 "-f", "${file}"
             ],
             "group": {
                 "kind": "build",
-                "isDefault": true
+                "isDefault": false
             }
         }
     ]
